@@ -1,0 +1,9 @@
+pandas
+holidays
+apache-airflow
+mlxtend
+numpy
+pyyaml
+sqlalchemy
+sqlalchemy[dialects.postgresql]
+psycopg2
