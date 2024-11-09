@@ -1,16 +1,16 @@
 fuente:
   drivername: postgresql  
-  user: postgres
-  password : 1234
+  user: Hernan
+  password : Jayirobe333.
   port: 5432
   host: localhost
-  dbname: Rapidos_FuriososBD
+  dbname: BD_RapidosYFuriosos
 
 
 bodega:
-  drivername: postgresql  
-  user: postgres
-  password : 1234
+  drivername: postgresql
+  user: Hernan
+  password : Jayirobe333.
   port: 5432
   host: localhost
-  dbname: Rapidos_FuriososETL
+  dbname: ETL_RapidosYFuriosos
