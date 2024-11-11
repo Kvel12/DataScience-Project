@@ -1,220 +1,465 @@
 import datetime
-from datetime import timedelta, date, datetime
-from typing import Tuple, Any
+from datetime import date
 
-import holidays
 import numpy as np
 import pandas as pd
-from mlxtend.frequent_patterns import apriori
-from mlxtend.preprocessing import TransactionEncoder
 from pandas import DataFrame
 
-
-def transform_ips(dim_ips: DataFrame) -> DataFrame:
-    dim_ips.replace({'': '0'}, inplace=True)
-    dim_ips["saved"] = date.today()
-    return dim_ips
-
-
-def transform_medico(dim_medico: DataFrame) -> DataFrame:
-    dim_medico.replace({np.nan: 'no aplica', ' ': 'no aplica','':'no_aplica'}, inplace=True)
-    dim_medico["saved"] = date.today()
-    return dim_medico
-
-
-def transform_persona(args) -> DataFrame:
-    beneficiarios, cotizantes, cot_ben = args
-    cotizantes.rename(columns={'cedula': 'numero_identificacion'}, inplace=True)
-    cotizantes.drop(
-        columns=['direccion', 'tipo_cotizante', 'nivel_escolaridad', 'estracto', 'proviene_otra_eps', 'salario_base',
-                 'fecha_afiliacion', 'id_ips'], inplace=True)
-    cotizantes['tipo_documento'] = "cedula"
-    cotizantes['tipo_usuario'] = "cotizante"
-    cotizantes['grupo_familiar'] = cotizantes['numero_identificacion']
-    beneficiarios.drop(columns=['parentesco'], inplace=True)
-    beneficiarios.rename(columns={'tipo_identificacion': 'tipo_documento', 'id_beneficiario': 'numero_identificacion'},
-                         inplace=True)
-    beneficiarios['tipo_usuario'] = "beneficiario"
-    beneficiario = beneficiarios.merge(cot_ben, left_on='numero_identificacion', right_on='beneficiario', how='left')
-    beneficiario.rename(columns={'cotizante': 'grupo_familiar'}, inplace=True)
-    beneficiario.drop(columns=['beneficiario'], inplace=True)
-    dim_persona = pd.concat([beneficiario, cotizantes])
-    dim_persona["saved"] = date.today()
-    dim_persona.reset_index(drop=True, inplace=True)
-
-    return dim_persona
-
-
-def transform_servicio() -> DataFrame:
-    dim_servicio = pd.DataFrame({
-        'name': ['citas', 'hospitalizacion', 'urgencias'],
-        'descripcion': ['servicio de citas medicas', 'servicio de hospitalizacion', 'servicio de urgencias']
-    })
-    return dim_servicio
-
-
-def transform_fecha() -> DataFrame:
-    dim_fecha = pd.DataFrame({"date": pd.date_range(start='1/1/2005', end='1/1/2009', freq='D')})
-    dim_fecha["year"] = dim_fecha["date"].dt.year
-    dim_fecha["month"] = dim_fecha["date"].dt.month
-    dim_fecha["day"] = dim_fecha["date"].dt.day
-    dim_fecha["weekday"] = dim_fecha["date"].dt.weekday
-    dim_fecha["quarter"] = dim_fecha["date"].dt.quarter
-    dim_fecha["day_of_year"] = dim_fecha["date"].dt.day_of_year
-    dim_fecha["day_of_month"] = dim_fecha["date"].dt.days_in_month
-    dim_fecha["month_str"] = dim_fecha["date"].dt.month_name()  # run locale -a en unix
-    dim_fecha["day_str"] = dim_fecha["date"].dt.day_name()  # locale = 'es_CO.UTF8'
-    dim_fecha["date_str"] = dim_fecha["date"].dt.strftime("%d/%m/%Y")
-    co_holidays = holidays.CO(language="es")
-    dim_fecha["is_Holiday"] = dim_fecha["date"].apply(lambda x: x in co_holidays)
-    dim_fecha["holiday"] = dim_fecha["date"].apply(lambda x: co_holidays.get(x))
-    dim_fecha["weekend"] = dim_fecha["weekday"].apply(lambda x: x > 4)
-    dim_fecha["saved"] = date.today()
+def transform_dim_fecha() -> pd.DataFrame:
+    """
+    Genera la dimensión fecha para el período especificado
+    Returns:
+        pd.DataFrame: Dimensión fecha con todos sus atributos
+    """
+    # Generar fechas
+    fechas = pd.date_range(start='2023-01-01', end='2024-12-31', freq='D')
+    dim_fecha = pd.DataFrame({'fecha': fechas})
+    
+    # Convertir a timestamp sin hora (solo fecha)
+    dim_fecha['fecha'] = dim_fecha['fecha'].dt.strftime('%Y-%m-%d')
+    dim_fecha['fecha'] = pd.to_datetime(dim_fecha['fecha'])
+    
+    # Extraer componentes de la fecha
+    dim_fecha['año'] = dim_fecha['fecha'].dt.year
+    dim_fecha['mes'] = dim_fecha['fecha'].dt.month
+    dim_fecha['dia'] = dim_fecha['fecha'].dt.day
+    dim_fecha['dia_semana'] = dim_fecha['fecha'].dt.dayofweek  # 0 = Lunes, 6 = Domingo
+    
+    # Agregar fecha de carga
+    dim_fecha['saved'] = date.today()
+    
     return dim_fecha
 
-def transform_trans_servicio(args) -> DataFrame:
-    df_citas, df_urgencias, df_hosp = args
-    df_hosp.rename(columns={'codigo_hospitalizacion': 'codigo_servicio'}, inplace=True)
-    df_urgencias.rename(columns={'codigo_urgencia': 'codigo_servicio'}, inplace=True)
-    df_citas.rename(columns={'codigo_cita': 'codigo_servicio'}, inplace=True)
 
-    df_citas['tipo_servicio'] = 'citas'
-    df_urgencias['tipo_servicio'] = 'urgencias'
-    df_hosp['tipo_servicio'] = 'hospitalizacion'
+def get_periodo_dia(hora: int) -> str:
+    """
+    Determina el periodo del día según la hora
+    Args:
+        hora: Hora del día (0-23)
+    Returns:
+        str: Periodo del día (Madrugada, Mañana, Tarde, Noche)
+    """
+    if 0 <= hora < 6:
+        return 'Madrugada'
+    elif 6 <= hora < 12:
+        return 'Mañana'
+    elif 12 <= hora < 18:
+        return 'Tarde'
+    else:
+        return 'Noche'
 
-    columns = ['codigo_servicio', 'id_usuario', 'id_medico', 'fecha_solicitud', 'fecha_atencion', 'hora_atencion',
-               'hora_solicitud', 'tipo_servicio']
-    trans_servicio = pd.concat([df_hosp, df_urgencias, df_citas], axis=0)
-    trans_servicio.head()
-    del_columns = set(trans_servicio.columns) - set(columns)
-    trans_servicio.drop(columns=del_columns, inplace=True)
-    trans_servicio['fecha_atencion'] = pd.to_datetime(trans_servicio['fecha_atencion'])
-    trans_servicio['fecha_solicitud'] = pd.to_datetime(trans_servicio['fecha_solicitud'])
-    trans_servicio['hora_atencion'] = trans_servicio['hora_atencion'].apply(
-        lambda x: timedelta(hours=x.hour, minutes=x.minute, seconds=x.second))
-    trans_servicio['hora_solicitud'] = trans_servicio['hora_solicitud'].apply(
-        lambda x: timedelta(hours=x.hour, minutes=x.minute, seconds=x.second))
-    trans_servicio['fecha_hora_atencion'] = trans_servicio['fecha_atencion'] + trans_servicio['hora_atencion']
-    trans_servicio['fecha_hora_solicitud'] = trans_servicio['fecha_solicitud'] + trans_servicio['hora_solicitud']
-    trans_servicio["saved"] = date.today()
-    trans_servicio.reset_index(drop=True, inplace=True)
-    return trans_servicio
-
-def transfrom_hecho_entrega(args:list[DataFrame]) -> tuple[Any, Any]:
-    df_med, df_form, df_per, df_doc, df_fecha = args
-    df_form['medicamentos'] = df_form['medicamentos'].apply(lambda x: x.split(';'))
-    df_form_expl = df_form.explode('medicamentos')
-    df_med = df_med.astype('string')
-    df_mer = df_form_expl.merge(df_med[['codigo','nombre']], left_on='medicamentos',right_on= 'codigo')
-    df_fix = df_mer.groupby(['codigo_formula','id_medico','id_usuario','fecha']).agg({ 'nombre' : list    }).reset_index()
-    df_fix.rename(columns={'nombre':'medicamentos'}, inplace=True)
-    df_fix = df_fix.merge(df_per[['numero_identificacion','key_dim_persona']]
-                 ,right_on='numero_identificacion',left_on='id_usuario')
-    df_fix = df_fix.merge(df_doc[['cedula','key_dim_medico']],
-                 left_on='id_medico',right_on='cedula')
-    df_fecha['date'] = df_fecha['date'].dt.date
-
-    df_fix = df_fix.merge(df_fecha[['key_dim_fecha','date']],left_on='fecha',right_on='date')
-    df_fix.drop(columns = ['cedula','numero_identificacion','id_usuario','id_medico','codigo_formula','fecha','date'],inplace=True)
-    masrecetados = df_fix['medicamentos'].to_list()
-    te = TransactionEncoder()
-    te_ary = te.fit(masrecetados).transform(masrecetados)
-    df = pd.DataFrame(te_ary, columns=te.columns_)
-    frequent_itemsets = apriori(df, min_support=0.02, use_colnames=True)
-    frequent_itemsets['length'] = frequent_itemsets['itemsets'].apply(lambda x: len(x))
-    frequent_itemsets = frequent_itemsets[ (frequent_itemsets['length'] >= 2) &
-                       (frequent_itemsets['support'] >= 0.05) ]
-    return df_fix, frequent_itemsets
-
-# modificar para anadir demografia y enfermedades(diagnostico)
-def transform_hecho_atencion(args) -> DataFrame:
-    df_trans, dim_persona, dim_medico, dim_servicio, dim_ips, dim_fecha,dim_diag,dim_demo = args
-    hecho_atencion = pd.merge(df_trans, dim_fecha[['date', 'key_dim_fecha']], left_on='fecha_atencion', right_on='date')
-    hecho_atencion.drop(columns=['date'], inplace=True)
-    hecho_atencion.rename(
-        columns={'key_dim_fecha': 'key_fecha_atencion', 'id_medico': 'cedula', 'id_usuario': 'numero_identificacion'},
-        inplace=True)
-    hecho_atencion = pd.merge(hecho_atencion, dim_fecha[['date', 'key_dim_fecha']], left_on='fecha_solicitud',
-                              right_on='date')
-    hecho_atencion.drop(columns=['date'], inplace=True)
-
-    hecho_atencion.rename(columns={'key_dim_fecha': 'key_fecha_solicitud'}, inplace=True)
-    hecho_atencion = hecho_atencion.merge(dim_persona[['key_dim_persona', 'numero_identificacion']])
-    hecho_atencion = hecho_atencion.merge(dim_demo[['key_dim_demo', 'numero_identificacion']])
-    hecho_atencion = hecho_atencion.merge(dim_diag[['key_dim_diag', 'numero_identificacion']])
-    hecho_atencion.drop(columns=['numero_identificacion'], inplace=True)
-    hecho_atencion = hecho_atencion.merge(dim_medico[['key_dim_medico', 'cedula', 'id_ips']])
-    hecho_atencion.drop(columns=['cedula'], inplace=True)
-    hecho_atencion = hecho_atencion.merge(dim_ips[['key_dim_ips', 'id_ips']])
-    hecho_atencion.drop(columns=['id_ips'], inplace=True)
-    hecho_atencion = hecho_atencion.merge(dim_servicio[['name', 'key_dim_servicio']], left_on='tipo_servicio',
-                                          right_on='name')
-    hecho_atencion.drop(columns=['name', 'tipo_servicio'], inplace=True)
-    hecho_atencion['tiempo_espera'] = hecho_atencion['fecha_hora_atencion'] - hecho_atencion['fecha_hora_solicitud']
-    hecho_atencion['tiempo_espera_dias'] = hecho_atencion['tiempo_espera'].dt.days
-    hecho_atencion['tiempo_espera_minutos'] = hecho_atencion['tiempo_espera'].dt.seconds // 60
-    hecho_atencion['tiempo_espera_horas'] = hecho_atencion['tiempo_espera'].dt.seconds // (60 * 60)
-    hecho_atencion['tiempo_espera_segundos'] = hecho_atencion['tiempo_espera'].dt.seconds
-    hecho_atencion["saved"] = date.today()
+def transform_dim_hora() -> pd.DataFrame:
+    """
+    Genera la dimensión hora con las 24 horas del día y sus periodos
+    Returns:
+        pd.DataFrame: Dimensión hora con todos sus atributos
+    """
+    horas = []
+    for hora in range(24):
+        horas.append({
+            'hora': hora,
+            'periodo_dia': get_periodo_dia(hora)
+        })
+        
+    # Crear DataFrame
+    dim_hora = pd.DataFrame(horas)
+    
+    # Agregar fecha de carga
+    dim_hora['saved'] = date.today()
+    
+    return dim_hora
 
 
+def transform_dim_cliente(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Transforma los datos de la dimensión cliente
+    Args:
+        df: DataFrame con los datos extraídos de cliente
+    Returns:
+        pd.DataFrame: DataFrame transformado
+    """
+    # Por ahora solo agregamos la fecha de carga
+    # Aquí podrías agregar más transformaciones si son necesarias en el futuro
+    df['saved'] = date.today()
+    return df
 
-    hecho_atencion.drop(
-        columns=['tiempo_espera', 'fecha_atencion', 'fecha_solicitud', 'hora_solicitud', 'hora_atencion',
-                 'fecha_hora_solicitud', 'fecha_hora_atencion', 'codigo_servicio'], inplace=True)
 
-    return hecho_atencion
+def transform_dim_mensajero(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Transforma los datos de la dimensión mensajero
+    Args:
+        df: DataFrame con los datos extraídos de mensajero
+    Returns:
+        pd.DataFrame: DataFrame transformado
+    """
+    # Reemplazar valores nulos
+    df = df.replace({
+        None: 'No especificado', 
+        '': 'No especificado',
+        pd.NaT: None  # Para fechas nulas
+    })
+    
+    # Asegurarse de que las fechas estén en el formato correcto
+    df['fecha_entrada'] = pd.to_datetime(df['fecha_entrada']).dt.date
+    df['fecha_salida'] = pd.to_datetime(df['fecha_salida']).dt.date
+    
+    # Agregar fecha de carga
+    df['saved'] = date.today()
+    
+    return df
 
-def transform_pay_retiros(args) -> DataFrame:
-    return args
+def transform_dim_sede(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Transforma los datos de la dimensión sede
+    Args:
+        df: DataFrame con los datos extraídos de sede
+    Returns:
+        pd.DataFrame: DataFrame transformado
+    """
+    # Agregar fecha de carga
+    df['saved'] = date.today()
+    return df
 
-def transform_demografia(args) -> DataFrame:
-    df_benco, df_cot, df_ben, df_ips, empresa,empcot = args
-    #df_ben = pd.merge(df_benco, df_ben, right_on='id_beneficiario',left_on='beneficiario')
-    #df_ben.drop(columns=['id_beneficiario'], inplace=True)
-    df_ben['tipo_usuario'] = 'beneficiario'
-    df_cot.rename(columns={'tipo_cotizante': 'tipo_usuario'}, inplace=True)
 
-    df_cot = df_cot.merge(df_ips)
-    df_cot = df_cot.merge(empcot)
-    df_cot = df_cot.merge(empresa)
-    df_demo = pd.concat([df_ben, df_cot])
-    #df_demo.fillna('NO APLICA', inplace=True)
-    df_demo['edad'] = df_demo['fecha_nacimiento'].apply(lambda x: (date.today() - x).days // 365)
-    df_demo.replace(np.nan, 'NO APLICA', inplace=True)
-    df_demo.drop(columns=['nit','id_ips'], inplace=True)
-    return df_demo
+def transform_dim_novedad(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Transforma los datos de la dimensión novedad
+    Args:
+        df: DataFrame con los datos extraídos de novedades
+    Returns:
+        pd.DataFrame: DataFrame transformado
+    """
+    # Agregar fecha de carga
+    df['saved'] = date.today()
+    return df
 
-def transform_enfermedades(args) -> DataFrame:
-    urg, citas, hosp , remi = args
-    df_enfermedades = pd.concat([urg, citas, hosp, remi])
-    df_enfermedades.drop_duplicates(inplace=True)
-    df_enfermedades.rename(columns={'id_usuario': 'numero_identificacion','fecha_atencion':'fecha_diagnostico'}, inplace=True)
-    return df_enfermedades
-#%%
-def lattestpayment(data:DataFrame,fecha,months=1):
-    months = timedelta(days=30*months)
-    data['retirado'] = data['fecha_pago'].apply(lambda x:  datetime.strptime(fecha,'%Y-%m-%d').date() - x[-1] > months )
-    data['fecha_retiro']= data['fecha_pago'].apply(lambda x: x[-1])
-    return data[['retirado','fecha_retiro','id_usuario']]
+def transform_dim_estado(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Transforma los datos de la dimensión estado
+    Args:
+        df: DataFrame con los datos extraídos de estados
+    Returns:
+        pd.DataFrame: DataFrame transformado
+    """
+    # Agregar fecha de carga
+    df['saved'] = date.today()
+    return df
 
-def transform_hecho_retiros(args,months,lastdate='2008-11-15',) -> DataFrame:
-    pagos, retiros,dim_per,dim_demo,dim_fecha = args
-    mask = pagos['id_usuario'].isin(retiros['id_usuario'])
-    pagos =  pagos[~mask]
-    testretiros = pagos.groupby('id_usuario').agg({'fecha_pago':list}).reset_index()
-    pagos = lattestpayment(testretiros,lastdate,months)
-    pagos['cambio_a_eps'] = 'NO'
-    retiros.replace({'':'NO'},inplace=True)
-    retiros['retirado'] = True
-    hecho_retiros = pd.concat([pagos[pagos['retirado']==True],
-                               retiros[['fecha_retiro','id_usuario','cambio_a_eps','retirado']]],ignore_index=True)
-    hecho_retiros = hecho_retiros.merge(dim_per[['key_dim_persona','numero_identificacion']],left_on='id_usuario',right_on='numero_identificacion')
-    hecho_retiros = hecho_retiros.merge(dim_demo[['key_dim_demo','numero_identificacion']],left_on='id_usuario',right_on='numero_identificacion')
+def calcular_tiempo_entre_estados(fecha1, hora1, fecha2, hora2):
+    """
+    Calcula el tiempo transcurrido entre dos estados
+    """
+    try:
+        if pd.isna(fecha1) or pd.isna(fecha2) or pd.isna(hora1) or pd.isna(hora2):
+            return "00:00:00"
+        
+        timestamp1 = pd.to_datetime(f"{fecha1} {hora1}")
+        timestamp2 = pd.to_datetime(f"{fecha2} {hora2}")
+        
+        if timestamp2 < timestamp1:
+            timestamp1, timestamp2 = timestamp2, timestamp1
+            
+        segundos = (timestamp2 - timestamp1).total_seconds()
+        hours = int(segundos // 3600)
+        minutes = int((segundos % 3600) // 60)
+        seconds = int(segundos % 60)
+        return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+    except:
+        return "00:00:00"
 
-    dim_fecha['date'] = dim_fecha['date'].dt.date
+def transform_hecho_acumulado(df: pd.DataFrame, dim_fecha: pd.DataFrame, 
+                            dim_cliente: pd.DataFrame, dim_mensajero: pd.DataFrame,
+                            dim_hora: pd.DataFrame) -> pd.DataFrame:
+    """
+    Transforma los datos para crear el hecho acumulado
+    """
+    # Limpiar formato de hora
+    df['hora_estado'] = df['hora_estado'].apply(lambda x: str(x).split('.')[0] if '.' in str(x) else str(x))
+    
+    # Procesar estado 3 (novedades)
+    estado_3 = df[df['estado_id'] == 3].groupby('servicio_id').agg({
+        'fecha_estado': list,
+        'hora_estado': list,
+        'cliente_id': 'first',
+        'mensajero_inicial_id': 'first'
+    }).reset_index()
+    
+    # Crear DataFrame de novedades
+    df_novedades = pd.DataFrame({'servicio_id': df['servicio_id'].unique()})
+    df_novedades['tiene_novedad'] = df_novedades['servicio_id'].isin(estado_3['servicio_id'])
+    df_novedades['cantidad_novedades'] = 0
+    
+    # Actualizar novedades
+    servicios_con_novedades = estado_3.copy()
+    servicios_con_novedades['cantidad_novedades'] = servicios_con_novedades['fecha_estado'].str.len()
+    df_novedades.update(
+        servicios_con_novedades[['servicio_id', 'cantidad_novedades']].set_index('servicio_id')
+    )
+    
+    # Procesar todos los estados
+    df_estados = pd.DataFrame()
+    for estado in [1, 2, 3, 4, 5, 6]:
+        if estado == 3:
+            estado_data = estado_3.copy()
+            estado_data['fecha_primera_novedad'] = estado_data['fecha_estado'].apply(lambda x: x[0] if x else None)
+            estado_data['hora_primera_novedad'] = estado_data['hora_estado'].apply(lambda x: x[0] if x else None)
+            estado_data['fecha_ultima_novedad'] = estado_data['fecha_estado'].apply(lambda x: x[-1] if x else None)
+            estado_data['hora_ultima_novedad'] = estado_data['hora_estado'].apply(lambda x: x[-1] if x else None)
+        else:
+            estado_data = df[df['estado_id'] == estado].groupby('servicio_id').agg({
+                'fecha_estado': 'first',
+                'hora_estado': 'first',
+                'cliente_id': 'first',
+                'mensajero_inicial_id': 'first'
+            }).reset_index()
+        
+        nombre_estado = {1: 'iniciado', 2: 'asignado', 3: 'novedad',
+                        4: 'recogido', 5: 'entregado', 6: 'cerrado'}[estado]
+        
+        if estado == 3:
+            columnas_rename = {
+                'fecha_primera_novedad': f'fecha_{nombre_estado}',
+                'hora_primera_novedad': f'hora_{nombre_estado}',
+                'fecha_ultima_novedad': f'fecha_ultima_{nombre_estado}',
+                'hora_ultima_novedad': f'hora_ultima_{nombre_estado}'
+            }
+        else:
+            columnas_rename = {
+                'fecha_estado': f'fecha_{nombre_estado}',
+                'hora_estado': f'hora_{nombre_estado}'
+            }
+        
+        estado_data = estado_data.rename(columns=columnas_rename)
+        
+        if len(df_estados) == 0:
+            df_estados = estado_data
+            df_estados = df_estados.merge(df_novedades[['servicio_id', 'cantidad_novedades']], 
+                                        on='servicio_id', how='left')
+        else:
+            df_estados = df_estados.merge(estado_data, 
+                                        on=['servicio_id', 'cliente_id', 'mensajero_inicial_id'],
+                                        how='outer')
+    
+    # Calcular tiempos entre estados
+    df_estados['tiempo_asignacion'] = df_estados.apply(
+        lambda row: calcular_tiempo_entre_estados(
+            row['fecha_iniciado'], row['hora_iniciado'],
+            row['fecha_asignado'], row['hora_asignado']
+        ), axis=1
+    )
+    
+    df_estados['tiempo_total_novedades'] = df_estados.apply(
+        lambda row: calcular_tiempo_entre_estados(
+            row['fecha_novedad'], row['hora_novedad'],
+            row['fecha_ultima_novedad'], row['hora_ultima_novedad']
+        ) if pd.notna(row['fecha_novedad']) else "00:00:00",
+        axis=1
+    )
+    
+    df_estados['tiempo_recogida'] = df_estados.apply(
+        lambda row: calcular_tiempo_entre_estados(
+            row['fecha_asignado'], row['hora_asignado'],
+            row['fecha_recogido'], row['hora_recogido']
+        ) if pd.isna(row.get('fecha_novedad')) else
+        calcular_tiempo_entre_estados(
+            row['fecha_ultima_novedad'], row['hora_ultima_novedad'],
+            row['fecha_recogido'], row['hora_recogido']
+        ), axis=1
+    )
+    
+    df_estados['tiempo_entrega'] = df_estados.apply(
+        lambda row: calcular_tiempo_entre_estados(
+            row['fecha_recogido'], row['hora_recogido'],
+            row['fecha_entregado'], row['hora_entregado']
+        ), axis=1
+    )
+    
+    df_estados['tiempo_cierre'] = df_estados.apply(
+        lambda row: calcular_tiempo_entre_estados(
+            row['fecha_entregado'], row['hora_entregado'],
+            row['fecha_cerrado'], row['hora_cerrado']
+        ), axis=1
+    )
+    
+    # Preparar para merge con dimensiones
+    df_estados['fecha_iniciado'] = pd.to_datetime(df_estados['fecha_iniciado']).dt.date
+    dim_fecha['fecha'] = pd.to_datetime(dim_fecha['fecha']).dt.date
+    df_estados['hora_del_dia'] = df_estados['hora_iniciado'].apply(
+        lambda x: int(x.split(':')[0]) if pd.notna(x) else None
+    )
+    
+    # Realizar merges con dimensiones
+    hecho_acumulado = df_estados.merge(
+        dim_fecha[['key_dim_fecha', 'fecha']], 
+        left_on='fecha_iniciado', 
+        right_on='fecha',
+        how='left'
+    ).merge(
+        dim_cliente[['key_dim_cliente', 'cliente_id']], 
+        on='cliente_id',
+        how='left'
+    ).merge(
+        dim_mensajero[['key_dim_mensajero', 'mensajero_id']], 
+        left_on='mensajero_inicial_id',
+        right_on='mensajero_id',
+        how='left'
+    ).merge(
+        dim_hora[['key_dim_hora', 'hora']], 
+        left_on='hora_del_dia',
+        right_on='hora',
+        how='left'
+    )
 
-    hecho_retiros = hecho_retiros.merge(dim_fecha[['key_dim_fecha','date']],left_on='fecha_retiro',right_on='date')
-    hecho_retiros.drop(columns=['numero_identificacion_y','numero_identificacion_x','date','fecha_retiro','id_usuario'],inplace=True)
+    # Seleccionar y ordenar columnas finales
+    columnas_finales = [
+        'servicio_id',
+        'key_dim_fecha',
+        'key_dim_cliente',
+        'key_dim_mensajero',
+        'key_dim_hora',
+        'fecha_iniciado',
+        'hora_iniciado',
+        'fecha_asignado',
+        'hora_asignado',
+        'fecha_novedad',
+        'hora_novedad',
+        'fecha_ultima_novedad',
+        'hora_ultima_novedad',
+        'fecha_recogido',
+        'hora_recogido',
+        'fecha_entregado',
+        'hora_entregado',
+        'fecha_cerrado',
+        'hora_cerrado',
+        'tiempo_asignacion',
+        'tiempo_total_novedades',
+        'tiempo_recogida',
+        'tiempo_entrega',
+        'tiempo_cierre',
+        'cantidad_novedades'
+    ]
+    
+    # Agregar fecha de carga
+    hecho_acumulado['saved'] = date.today()
+    
+    # Asegurarse que todas las columnas necesarias existen
+    for col in columnas_finales:
+        if col not in hecho_acumulado.columns:
+            hecho_acumulado[col] = None
+            
+    # Retornar solo las columnas necesarias en el orden correcto
+    columnas_finales.append('saved')
+    return hecho_acumulado[columnas_finales]
 
-    return hecho_retiros
+
+def transform_hecho_servicio_hora(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Transforma los datos para el hecho de servicios por hora
+    Args:
+        df: DataFrame con los datos extraídos
+    Returns:
+        pd.DataFrame: DataFrame transformado con la agregación por hora
+    """
+    # Agrupar por las dimensiones relevantes
+    hecho_hora = df.groupby([
+        'key_dim_fecha',
+        'key_dim_cliente',
+        'key_dim_sede',
+        'key_dim_mensajero',
+        'key_dim_hora',
+        'servicio_id'
+    ]).size().reset_index(name='cantidad_servicios')
+    
+    # Agregar fecha de carga
+    hecho_hora['saved'] = date.today()
+    
+    # Asegurar que todos los campos numéricos sean del tipo correcto
+    numeric_columns = ['key_dim_fecha', 'key_dim_cliente', 'key_dim_sede', 
+                      'key_dim_mensajero', 'key_dim_hora', 'servicio_id', 
+                      'cantidad_servicios']
+    
+    for col in numeric_columns:
+        if col in hecho_hora.columns:
+            hecho_hora[col] = pd.to_numeric(hecho_hora[col], errors='coerce')
+    
+    return hecho_hora
+
+
+def transform_hecho_servicio_diaria(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Transforma los datos para el hecho de servicios por día
+    Args:
+        df: DataFrame con los datos extraídos
+    Returns:
+        pd.DataFrame: DataFrame transformado con la agregación por día
+    """
+    # Agrupar por las dimensiones relevantes
+    hecho_dia = df.groupby([
+        'key_dim_fecha',
+        'key_dim_cliente',
+        'key_dim_sede',
+        'key_dim_mensajero',
+        'servicio_id'
+    ]).size().reset_index(name='cantidad_servicios_dia')
+    
+    # Agregar fecha de carga
+    hecho_dia['saved'] = date.today()
+    
+    # Asegurar que todos los campos numéricos sean del tipo correcto
+    numeric_columns = ['key_dim_fecha', 'key_dim_cliente', 'key_dim_sede', 
+                      'key_dim_mensajero', 'servicio_id', 'cantidad_servicios_dia']
+    
+    for col in numeric_columns:
+        if col in hecho_dia.columns:
+            hecho_dia[col] = pd.to_numeric(hecho_dia[col], errors='coerce')
+    
+    return hecho_dia
+
+
+def transform_hecho_novedades(df: pd.DataFrame, dim_fecha: pd.DataFrame, 
+                            dim_cliente: pd.DataFrame, dim_novedad: pd.DataFrame) -> pd.DataFrame:
+    """
+    Transforma los datos para el hecho de novedades
+    Args:
+        df: DataFrame con los datos de novedades
+        dim_fecha: Dimensión fecha
+        dim_cliente: Dimensión cliente
+        dim_novedad: Dimensión novedad
+    Returns:
+        pd.DataFrame: DataFrame transformado con las novedades
+    """
+    # Convertir fecha_novedad a datetime y extraer componentes
+    df['fecha_hora_novedad'] = pd.to_datetime(df['fecha_hora_novedad']).dt.date
+    dim_fecha['fecha'] = pd.to_datetime(dim_fecha['fecha']).dt.date
+    
+    # Realizar los merges con las dimensiones
+    hecho_novedades = df.merge(
+        dim_fecha[['key_dim_fecha', 'fecha']], 
+        left_on='fecha_hora_novedad', 
+        right_on='fecha',
+        how='left'
+    ).merge(
+        dim_cliente[['key_dim_cliente', 'cliente_id']], 
+        on='cliente_id',
+        how='left'
+    ).merge(
+        dim_novedad[['key_dim_novedad', 'novedad_id']], 
+        on='novedad_id',
+        how='left'
+    )
+    
+    # Seleccionar columnas finales
+    columnas_finales = [
+        'key_dim_fecha',
+        'key_dim_cliente',
+        'key_dim_novedad',
+        'fecha_hora_novedad',
+        'descripcion'
+    ]
+    
+    hecho_novedades = hecho_novedades[columnas_finales]
+    
+    # Agregar fecha de carga
+    hecho_novedades['saved'] = date.today()
+    
+    return hecho_novedades
