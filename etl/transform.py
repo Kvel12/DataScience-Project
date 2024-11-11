@@ -1,6 +1,5 @@
 import datetime
 from datetime import date
-
 import numpy as np
 import pandas as pd
 from pandas import DataFrame
@@ -47,6 +46,7 @@ def get_periodo_dia(hora: int) -> str:
         return 'Tarde'
     else:
         return 'Noche'
+
 
 def transform_dim_hora() -> pd.DataFrame:
     """
@@ -133,6 +133,7 @@ def transform_dim_novedad(df: pd.DataFrame) -> pd.DataFrame:
     df['saved'] = date.today()
     return df
 
+
 def transform_dim_estado(df: pd.DataFrame) -> pd.DataFrame:
     """
     Transforma los datos de la dimensión estado
@@ -144,6 +145,7 @@ def transform_dim_estado(df: pd.DataFrame) -> pd.DataFrame:
     # Agregar fecha de carga
     df['saved'] = date.today()
     return df
+
 
 def calcular_tiempo_entre_estados(fecha1, hora1, fecha2, hora2):
     """
@@ -166,6 +168,7 @@ def calcular_tiempo_entre_estados(fecha1, hora1, fecha2, hora2):
         return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
     except:
         return "00:00:00"
+
 
 def transform_hecho_acumulado(df: pd.DataFrame, dim_fecha: pd.DataFrame, 
                             dim_cliente: pd.DataFrame, dim_mensajero: pd.DataFrame,

@@ -89,6 +89,7 @@ def extract_dim_novedad(con: Engine) -> pd.DataFrame:
     """
     return pd.read_sql(query, con)
 
+
 def extract_dim_estado(con: Engine) -> pd.DataFrame:
     """
     Extrae los datos de estados del servicio
