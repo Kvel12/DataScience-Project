@@ -13,4 +13,4 @@ bodega:
   password : 1234
   port: 5432
   host: localhost
-  dbname: Rapidos_FuriososETL
+  dbname: prueba

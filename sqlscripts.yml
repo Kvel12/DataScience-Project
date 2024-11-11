@@ -1,176 +1,141 @@
-dim_sede :
-  CREATE TABLE dim_sede (
-    key_dim_sede SERIAL not null
-    constraint dim_sede_pk
-    primary key,
-    sede_id integer,
-    nombre character varying,
-    direccion character varying,
-    telefono character varying,
-    nombre_contacto character varying,
-    ciudad_nombre character varying,
-    departamento_nombre character varying,
-    cliente_nombre character varying,
-    cliente_nit character varying,
-    saved date
-  );
-
-
-dim_cliente :
-  CREATE TABLE dim_cliente (
-    key_dim_cliente SERIAL not null
-    constraint dim_cliente_pk
-    primary key,
-    cliente_id integer,
-    nombre character varying,
-    nit_cliente character varying,
-    tipo_cliente_nombre character varying,
-    sector character varying,
-    email character varying,
-    telefono character varying,
-    direccion character varying,
-    nombre_contacto character varying,
-    ciudad_nombre character varying,
-    departamento_nombre character varying,
-    activo boolean,
-    saved date
-  );
-
-
-dim_mensajero :
-  CREATE TABLE dim_mensajero (
-    key_dim_mensajero SERIAL not null
-    constraint dim_mensajero_pk
-    primary key,
-    mensajero_id bigint,
-    nombre character varying,
-    fecha_entrada date,
-    fecha_salida date,
-    ciudad_operacion_nombre character varying,
-    departamento_nombre character varying,
-    telefono character varying,
-    activo boolean,
-    saved date
-  );
-
-
-dim_estado :
-  CREATE TABLE dim_estado (
-    key_dim_estado SERIAL not null
-    constraint dim_estado_pk
-    primary key,
-    estado_id integer,
-    nombre character varying,
-    descripcion character varying,
-    saved date
-  );
-
-
-dim_tipo_novedad:
-  CREATE TABLE dim_tipo_novedad (
-    key_dim_tipo_novedad SERIAL not null
-    constraint dim_tipo_novedad_pk
-    primary key,
-    tipo_novedad_id integer,
-    nombre character varying,
-    descripcion character varying,
-    saved date
-  );
-
-
-dim_fecha :
+dim_fecha: |
   CREATE TABLE dim_fecha (
-    key_dim_fecha SERIAL not null
-    constraint dim_fecha_pk
-    primary key,
-    fecha date,
-    año integer,
-    mes integer,
-    dia integer,
-    dia_semana integer,
-    saved date
+    key_dim_fecha SERIAL NOT NULL PRIMARY KEY,
+    fecha DATE NOT NULL,
+    año INTEGER NOT NULL,
+    mes INTEGER NOT NULL,
+    dia INTEGER NOT NULL,
+    dia_semana INTEGER NOT NULL,
+    saved DATE NOT NULL
   );
 
-
-dim_hora :
+dim_hora: |
   CREATE TABLE dim_hora (
-    key_dim_hora SERIAL not null
-    constraint dim_hora_pk
-    primary key,
-    hora integer,
-    minuto integer,
-    segundo integer,
-    periodo_dia character varying,
-    saved date
+    key_dim_hora SERIAL NOT NULL PRIMARY KEY,
+    hora INTEGER NOT NULL,
+    periodo_dia VARCHAR(50) NOT NULL,
+    saved DATE NOT NULL
   );
 
-
-hecho_entrega_hora :
-  CREATE TABLE hecho_entrega_hora (
-    key_hecho_entrega_hora SERIAL not null
-    constraint hecho_entrega_hora_pk
-    primary key,
-    servicio_id integer,
-    key_dim_fecha integer references dim_fecha,
-    key_dim_cliente integer references dim_cliente,
-    key_dim_sede integer references dim_sede,
-    key_dim_mensajero integer references dim_mensajero,
-    key_dim_hora integer references dim_hora,
-    hora_total integer,
-    saved date
+dim_cliente: |
+  CREATE TABLE dim_cliente (
+    key_dim_cliente SERIAL NOT NULL PRIMARY KEY,
+    cliente_id INTEGER NOT NULL,
+    nombre VARCHAR(255),
+    nit_cliente VARCHAR(50),
+    tipo_cliente VARCHAR(100),
+    sector VARCHAR(100),
+    email VARCHAR(255),
+    telefono VARCHAR(50),
+    direccion TEXT,
+    nombre_contacto VARCHAR(255),
+    ciudad VARCHAR(100),
+    saved DATE NOT NULL
   );
 
-
-hecho_entrega_diaria :
-  CREATE TABLE hecho_entrega_diaria (
-    key_hecho_entrega_diaria SERIAL not null
-    constraint hecho_entrega_diaria_pk
-    primary key,
-    servicio_id integer,
-    key_dim_fecha integer references dim_fecha,
-    key_dim_cliente integer references dim_cliente,
-    key_dim_sede integer references dim_sede,
-    key_dim_mensajero integer references dim_mensajero,
-    tiempo_entrega integer,
-    saved date
+dim_mensajero: |
+  CREATE TABLE dim_mensajero (
+    key_dim_mensajero SERIAL NOT NULL PRIMARY KEY,
+    mensajero_id INTEGER,
+    fecha_entrada DATE,
+    fecha_salida DATE,
+    ciudad_operacion VARCHAR(100),
+    activo BOOLEAN,
+    saved DATE NOT NULL
   );
 
+dim_sede: |
+  CREATE TABLE dim_sede (
+    key_dim_sede SERIAL NOT NULL PRIMARY KEY,
+    sede_id INTEGER,
+    nombre_sede VARCHAR(255),
+    direccion_sede TEXT,
+    ciudad_sede VARCHAR(100),
+    departamento_sede VARCHAR(100),
+    saved DATE NOT NULL
+  );
 
-hecho_entrega_acumulado :
+dim_novedad: |
+  CREATE TABLE dim_novedad (
+    key_dim_novedad SERIAL NOT NULL PRIMARY KEY,
+    novedad_id INTEGER NOT NULL,
+    tipo_novedad_id INTEGER,
+    descripcion TEXT,
+    saved DATE NOT NULL
+  );
+
+dim_estado: |
+  CREATE TABLE dim_estado (
+    key_dim_estado SERIAL NOT NULL PRIMARY KEY,
+    estado_id INTEGER NOT NULL,
+    nombre_estado VARCHAR(100),
+    descripcion TEXT,
+    saved DATE NOT NULL
+  );
+
+hecho_entrega_acumulado: |
   CREATE TABLE hecho_entrega_acumulado (
-    key_hecho_entrega_acumulado SERIAL not null
-    constraint hecho_entrega_acumulado_pk
-    primary key,
-    servicio_id integer,
-    key_dim_fecha integer references dim_fecha,
-    key_dim_cliente integer references dim_cliente,
-    key_dim_mensajero integer references dim_mensajero,
-    key_dim_estado integer references dim_estado,
-    fecha_hora_solicitud timestamp,
-    fecha_hora_asignado timestamp,
-    fecha_hora_recogido timestamp,
-    fecha_hora_entregado timestamp,
-    fecha_hora_cerrado timestamp,
-    descripcion character varying,
-    tipo_servicio_nombre character varying,
-    tipo_vehiculo_nombre character varying,
-    prioridad character varying,
-    saved date
+    key_hecho_entrega_acumulado SERIAL NOT NULL PRIMARY KEY,
+    servicio_id INTEGER NOT NULL,
+    key_dim_fecha INTEGER REFERENCES dim_fecha(key_dim_fecha),
+    key_dim_cliente INTEGER REFERENCES dim_cliente(key_dim_cliente),
+    key_dim_mensajero INTEGER REFERENCES dim_mensajero(key_dim_mensajero),
+    key_dim_hora INTEGER REFERENCES dim_hora(key_dim_hora),
+    fecha_iniciado DATE,
+    hora_iniciado TIME,
+    fecha_asignado DATE,
+    hora_asignado TIME,
+    fecha_novedad DATE,
+    hora_novedad TIME,
+    fecha_ultima_novedad DATE,
+    hora_ultima_novedad TIME,
+    fecha_recogido DATE,
+    hora_recogido TIME,
+    fecha_entregado DATE,
+    hora_entregado TIME,
+    fecha_cerrado DATE,
+    hora_cerrado TIME,
+    tiempo_asignacion VARCHAR(50),
+    tiempo_total_novedades VARCHAR(50),
+    tiempo_recogida VARCHAR(50),
+    tiempo_entrega VARCHAR(50),
+    tiempo_cierre VARCHAR(50),
+    cantidad_novedades INTEGER,
+    saved DATE NOT NULL
   );
 
-  
-hecho_novedades :
-  CREATE TABLE hecho_novedades (
-    key_hecho_novedades SERIAL not null
-    constraint hecho_novedades_pk
-    primary key,
-    novedad_id integer,
-    key_dim_fecha integer references dim_fecha,
-    key_dim_mensajero integer references dim_mensajero,
-    key_dim_cliente integer references dim_cliente,
-    key_dim_tipo_novedad integer references dim_tipo_novedad,
-    fecha_novedad timestamp with time zone,
-    descripcion character varying,
-    es_prueba boolean,
-    saved date
+hecho_entrega_servicio_hora: |
+  CREATE TABLE hecho_entrega_servicio_hora (
+    key_hecho_entrega_servicio_hora SERIAL NOT NULL PRIMARY KEY,
+    key_dim_fecha INTEGER REFERENCES dim_fecha(key_dim_fecha),
+    key_dim_cliente INTEGER REFERENCES dim_cliente(key_dim_cliente),
+    key_dim_sede INTEGER REFERENCES dim_sede(key_dim_sede),
+    key_dim_mensajero INTEGER REFERENCES dim_mensajero(key_dim_mensajero),
+    key_dim_hora INTEGER REFERENCES dim_hora(key_dim_hora),
+    servicio_id INTEGER NOT NULL,
+    cantidad_servicios INTEGER NOT NULL,
+    saved DATE NOT NULL
+  );
+
+hecho_entrega_servicio_diaria: |
+  CREATE TABLE hecho_entrega_servicio_diaria (
+    key_hecho_entrega_servicio_diaria SERIAL NOT NULL PRIMARY KEY,
+    key_dim_fecha INTEGER REFERENCES dim_fecha(key_dim_fecha),
+    key_dim_cliente INTEGER REFERENCES dim_cliente(key_dim_cliente),
+    key_dim_sede INTEGER REFERENCES dim_sede(key_dim_sede),
+    key_dim_mensajero INTEGER REFERENCES dim_mensajero(key_dim_mensajero),
+    servicio_id INTEGER NOT NULL,
+    cantidad_servicios_dia INTEGER NOT NULL,
+    saved DATE NOT NULL
+  );
+
+hecho_novedades_servicio: |
+  CREATE TABLE hecho_novedades_servicio (
+    key_hecho_novedades_servicio SERIAL NOT NULL PRIMARY KEY,
+    key_dim_fecha INTEGER REFERENCES dim_fecha(key_dim_fecha),
+    key_dim_cliente INTEGER REFERENCES dim_cliente(key_dim_cliente),
+    key_dim_novedad INTEGER REFERENCES dim_novedad(key_dim_novedad),
+    fecha_hora_novedad DATE,
+    descripcion TEXT,
+    saved DATE NOT NULL
   );

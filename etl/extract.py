@@ -1,100 +1,224 @@
 import pandas as pd
 from sqlalchemy.engine import Engine
 
-
-def extract(tables : list,con: Engine)-> pd.DataFrame:
+def extract_dim_cliente(con: Engine) -> pd.DataFrame:
     """
-    :param con: the connection to the database
-    :param tables: the tables to extract
-    :return: a list of tables in df format
+    Extrae los datos de cliente junto con su tipo y ciudad de la base de datos fuente
+    Args:
+        con: Conexión a la base de datos fuente
+    Returns:
+        pd.DataFrame: DataFrame con los datos de cliente
     """
-    a = []
-    for i in tables:
-        aux = pd.read_sql_table(i, con)
-        a.append(aux)
-    return a
-
-def extract_ips(con: Engine):
+    query = """
+    SELECT 
+        c.cliente_id,
+        c.nombre,
+        c.nit_cliente,
+        tc.nombre as tipo_cliente,
+        c.sector,
+        c.email,
+        c.telefono,
+        c.direccion,
+        c.nombre_contacto,
+        ci.nombre as ciudad
+    FROM cliente c
+    LEFT JOIN tipo_cliente tc ON c.tipo_cliente_id = tc.tipo_cliente_id
+    LEFT JOIN ciudad ci ON c.ciudad_id = ci.ciudad_id
     """
-    Extract data from database where the conexion established
-    :param con:
-    :return:
+    return pd.read_sql(query, con)
+
+
+def extract_dim_mensajero(con: Engine) -> pd.DataFrame:
     """
-    dim_ips = pd.read_sql_table('ips', con)
-    return dim_ips
-def extract_medico(con: Engine):
-    dim_medico = pd.read_sql_table('medico', con)
-    return dim_medico
+    Extrae los datos de mensajero junto con su ciudad de operación
+    Args:
+        con: Conexión a la base de datos fuente
+    Returns:
+        pd.DataFrame: DataFrame con los datos de mensajero
+    """
+    query = """
+    SELECT 
+        m.id as mensajero_id,
+        m.fecha_entrada,
+        m.fecha_salida,
+        c.nombre as ciudad_operacion,
+        m.activo
+    FROM clientes_mensajeroaquitoy m
+    LEFT JOIN ciudad c ON m.ciudad_operacion_id = c.ciudad_id
+    """
+    return pd.read_sql(query, con)
 
-def extract_persona(con: Engine):
-    beneficiarios = pd.read_sql_table("beneficiario", con)
-    cotizantes = pd.read_sql_table("cotizante", con)
-    cot_ben = pd.read_sql_table("cotizante_beneficiario", con)
-    return [beneficiarios, cotizantes, cot_ben]
 
-def extract_trans_servicio(con: Engine):
-    df_citas = pd.read_sql_table('citas_generales', con)
-    df_urgencias = pd.read_sql_table('urgencias', con)
-    df_hosp = pd.read_sql_table('hospitalizaciones', con)
-    return [df_citas, df_urgencias, df_hosp]
+def extract_dim_sede(con: Engine) -> pd.DataFrame:
+    """
+    Extrae los datos de sedes junto con su información de ubicación
+    Args:
+        con: Conexión a la base de datos fuente
+    Returns:
+        pd.DataFrame: DataFrame con los datos de sedes
+    """
+    query = """
+    SELECT 
+        sede.sede_id,
+        sede.nombre AS nombre_sede,
+        sede.direccion AS direccion_sede,
+        ciudad.nombre AS ciudad_sede,
+        departamento.nombre AS departamento_sede
+    FROM sede 
+    JOIN ciudad ON sede.ciudad_id = ciudad.ciudad_id
+    JOIN departamento ON ciudad.departamento_id = departamento.departamento_id
+    """
+    return pd.read_sql(query, con)
 
-def extract_hecho_atencion(con: Engine):
-    df_diag = pd.read_sql_table('dim_diag', con)
-    df_demo = pd.read_sql_table('dim_demografia', con)
-    df_trans = pd.read_sql_table('trans_servicio', con)
-    dim_persona = pd.read_sql_table('dim_persona', con)
-    dim_medico = pd.read_sql_table('dim_medico', con)
-    dim_servicio = pd.read_sql_table('dim_servicio', con)
-    dim_ips = pd.read_sql_table('dim_ips', con)
-    dim_fecha = pd.read_sql_table('dim_fecha', con)
-    return [df_trans,dim_persona,dim_medico,dim_servicio,dim_ips,dim_fecha,df_diag,df_demo]#editar para anadir diag y demo
 
-def extract_medicamentos():
-    df_medicamentos = pd.read_excel('sources/medicamentos.xls')
-    df_medicamentos.rename(columns={'Código':'codigo', 'Nombre Genérico':'nombre','Forma Farmacéutica':'forma',
-                                    'Laboratorio y Registro':'laboratorio', 'Tipo Medicamento':'tipo'}, inplace=True)
-    return df_medicamentos
-def extract_receta(con:Engine):
-    df_receta = pd.read_sql_query('''select codigo_formula , id_medico, id_usuario, fecha, 
-    medicamentos_recetados as medicamentos from formulas_medicas''',con)
-    return df_receta
-def extract_demografia(con: Engine):
-    df_benco= pd.read_sql_table('cotizante_beneficiario', con)
-    df_cotizantes = pd.read_sql_query(
-        '''select cedula as numero_identificacion, tipo_cotizante, estado_civil, sexo, fecha_nacimiento,
-            nivel_escolaridad, estracto, proviene_otra_eps,salario_base,tipo_discapacidad,id_ips from cotizante''', con)
-    df_beneficiarios = pd.read_sql_query(
-        '''select id_beneficiario as numero_identificacion, fecha_nacimiento, sexo, estado_civil,
-         tipo_discapacidad from beneficiario ''', con)
-    df_ips = pd.read_sql_query('select id_ips,municipio,departamento from ips', con )
-    empresa = pd.read_sql_query('select nit , nombre as empresa from empresa', con)
-    empcot = pd.read_sql_query('select empresa as nit, cotizante as numero_identificacion from empresa_cotizante', con)
-    return [df_benco,df_cotizantes,df_beneficiarios,df_ips, empresa, empcot]
+def extract_dim_novedad(con: Engine) -> pd.DataFrame:
+    """
+    Extrae los datos de novedades del servicio
+    Args:
+        con: Conexión a la base de datos fuente
+    Returns:
+        pd.DataFrame: DataFrame con los datos de novedades
+    """
+    query = """
+    SELECT 
+        id as novedad_id,
+        tipo_novedad_id,
+        descripcion 
+    FROM 
+        mensajeria_novedadesservicio 
+    """
+    return pd.read_sql(query, con)
 
-def extract_enfermedades(con : Engine):
-    urgencias = pd.read_sql_query('select id_usuario, diagnostico,fecha_atencion from urgencias', con)
-    hospitalizaciones = pd.read_sql_query('select id_usuario, diagnostico, fecha_atencion  from hospitalizaciones', con)
-    citas_generales = pd.read_sql_query('select id_usuario, diagnostico,fecha_atencion  from citas_generales', con)
-    remisiones = pd.read_sql_query('select id_usuario, diagnostico, fecha_atencion  from remisiones', con)
+def extract_dim_estado(con: Engine) -> pd.DataFrame:
+    """
+    Extrae los datos de estados del servicio
+    Args:
+        con: Conexión a la base de datos fuente
+    Returns:
+        pd.DataFrame: DataFrame con los datos de estados
+    """
+    query = """
+    SELECT 
+        id as estado_id,
+        nombre as nombre_estado,
+        descripcion
+    FROM mensajeria_estado
+    """
+    return pd.read_sql(query, con)
 
-    return [urgencias, citas_generales, hospitalizaciones, remisiones]
 
-def extract_paymetns(con: Engine):
-    df = pd.read_sql_query('select * from pagos', con)
-    return df
+def extract_hecho_acumulado(source_engine: Engine, target_engine: Engine) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """
+    Extrae los datos necesarios para el hecho acumulado
+    Args:
+        source_engine: Conexión a la base de datos fuente
+        target_engine: Conexión a la base de datos bodega
+    Returns:
+        tuple: (df_servicios, dim_fecha, dim_cliente, dim_mensajero, dim_hora)
+    """
+    # Consulta principal desde la fuente
+    query = """
+    SELECT 
+        s.id as servicio_id,
+        s.cliente_id,
+        s.mensajero_id as mensajero_inicial_id,
+        es.estado_id,
+        es.fecha as fecha_estado,
+        es.hora as hora_estado
+    FROM mensajeria_servicio s
+    JOIN mensajeria_estadosservicio es ON s.id = es.servicio_id
+    ORDER BY s.id, es.fecha, es.hora
+    """
+    
+    # Extraer datos principales de la fuente
+    df_servicios = pd.read_sql(query, source_engine)
+    
+    # Extraer dimensiones de la bodega
+    dim_fecha = pd.read_sql_table('dim_fecha', target_engine)
+    dim_cliente = pd.read_sql_table('dim_cliente', target_engine)
+    dim_mensajero = pd.read_sql_table('dim_mensajero', target_engine)
+    dim_hora = pd.read_sql_table('dim_hora', target_engine)
+    
+    return df_servicios, dim_fecha, dim_cliente, dim_mensajero, dim_hora
 
-def extract_retiros(con: Engine,con_etl):
-    df_retiros = pd.read_sql_query('select * from retiros', con)
-    df_pagos = pd.read_sql_query('select * from pagos', con)
-    df_per = pd.read_sql_table('dim_persona', con_etl)
-    df_dom = pd.read_sql_query('select * from dim_demografia', con_etl)
-    df_fecha = pd.read_sql_query('select * from dim_fecha', con_etl)
-    return [df_pagos, df_retiros,df_per, df_dom,df_fecha]
 
-def extract_hecho_entrega(source, etl):
-    df_med = extract_medicamentos()
-    df_form = extract_receta(source)
-    df_per = pd.read_sql_table('dim_persona', etl)
-    df_doc = pd.read_sql_table('dim_medico', etl)
-    df_fecha = pd.read_sql_table('dim_fecha',etl)
-    return [df_med,df_form,df_per, df_doc,df_fecha]
+def extract_hecho_servicio_hora(con: Engine) -> pd.DataFrame:
+    """
+    Extrae los datos para el hecho de servicios por hora desde el hecho acumulado
+    Args:
+        con: Conexión a la base de datos bodega
+    Returns:
+        pd.DataFrame: DataFrame con los datos de servicios por hora
+    """
+    query = """
+    SELECT 
+        ha.servicio_id,
+        ha.key_dim_fecha,
+        ha.key_dim_cliente,
+        ha.key_dim_mensajero,
+        ha.key_dim_hora,
+        ds.key_dim_sede,
+        EXTRACT(HOUR FROM ha.hora_iniciado::time) as hora_servicio
+    FROM hecho_entrega_acumulado ha
+    JOIN dim_cliente dc ON ha.key_dim_cliente = dc.key_dim_cliente
+    JOIN dim_sede ds ON dc.cliente_id = ds.sede_id
+    WHERE ha.hora_iniciado IS NOT NULL
+    """
+    return pd.read_sql(query, con)
+
+
+def extract_hecho_servicio_diaria(con: Engine) -> pd.DataFrame:
+    """
+    Extrae los datos para el hecho de servicios por día desde el hecho acumulado
+    Args:
+        con: Conexión a la base de datos bodega
+    Returns:
+        pd.DataFrame: DataFrame con los datos de servicios por día
+    """
+    query = """
+    SELECT 
+        ha.servicio_id,
+        ha.key_dim_fecha,
+        ha.key_dim_cliente,
+        ha.key_dim_mensajero,
+        ds.key_dim_sede,
+        df.dia_semana
+    FROM hecho_entrega_acumulado ha
+    JOIN dim_cliente dc ON ha.key_dim_cliente = dc.key_dim_cliente
+    JOIN dim_sede ds ON dc.cliente_id = ds.sede_id
+    JOIN dim_fecha df ON ha.key_dim_fecha = df.key_dim_fecha
+    WHERE ha.fecha_iniciado IS NOT NULL
+    """
+    return pd.read_sql(query, con)
+
+
+def extract_hecho_novedades(con_fuente: Engine, con_bodega: Engine) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """
+    Extrae los datos necesarios para el hecho de novedades
+    Args:
+        con_fuente: Conexión a la base de datos fuente
+        con_bodega: Conexión a la base de datos bodega
+    Returns:
+        tuple: (df_novedades, dim_fecha, dim_cliente, dim_novedad)
+    """
+    # Consulta para datos de la fuente
+    query = """
+    SELECT 
+        n.id AS novedad_id,
+        n.fecha_novedad AS fecha_hora_novedad,
+        s.cliente_id,
+        n.mensajero_id,
+        n.tipo_novedad_id,
+        n.descripcion 
+    FROM 
+        mensajeria_novedadesservicio n
+        JOIN mensajeria_servicio s ON n.id = s.cliente_id
+    """
+    
+    # Extraer datos de la fuente y dimensiones de la bodega
+    df_novedades = pd.read_sql(query, con_fuente)
+    dim_fecha = pd.read_sql_table('dim_fecha', con_bodega)
+    dim_cliente = pd.read_sql_table('dim_cliente', con_bodega)
+    dim_novedad = pd.read_sql_table('dim_novedad', con_bodega)
+    
+    return df_novedades, dim_fecha, dim_cliente, dim_novedad

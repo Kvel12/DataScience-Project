@@ -1,7 +1,4 @@
 pandas
-holidays
-apache-airflow
-mlxtend
 numpy
 pyyaml
 sqlalchemy
